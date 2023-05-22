@@ -1,0 +1,16 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/arrayvl
+arrayvl.so
+arrayvl.dylib
+arrayvl.dll
+arrayvl.a
+arrayvl.lib
+arrayvl-test-*
+*.exe
+*.pdb
+*.o
+*.obj
+*.lst

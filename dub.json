@@ -1,0 +1,9 @@
+{
+	"authors": [
+		"Ben Jones"
+	],
+	"copyright": "Copyright © 2023, Ben Jones",
+	"description": "An implicitly structured, self-balancing, binary search tree",
+	"license": "MIT",
+	"name": "arrayvl"
+}
