@@ -40,6 +40,8 @@ struct Node{
         import std.conv : to;
         return isNull ? "null" : "Node(" ~ to!string(height) ~ " " ~ to!string(data) ~ ")";
     }
+
+
 }
 
      //start the Node array off at this size, then scale by GrowthFactor
@@ -47,37 +49,67 @@ struct Node{
     enum GrowthFactor = 2;
     Node[] data;
 
-    size_t parentIndex(size_t i){ return i == 0 ? 0 : (i -1)/2; }
-    size_t leftIndex(size_t i){ return 2*i + 1; }
-    size_t rightIndex(size_t i){ return 2*i + 2; }
+    size_t parentIndex(size_t i) const{ return i == 0 ? 0 : (i -1)/2; }
+    size_t leftIndex(size_t i) const{ return 2*i + 1; }
+    size_t rightIndex(size_t i) const{ return 2*i + 2; }
 
-    size_t hasRight(size_t i){
+    size_t predIndex(size_t i) const {
+        i = leftIndex(i);
+        while(hasRight(i)){
+            i = rightIndex(i);
+        }
+        return i;
+    }
+
+    size_t succIndex(size_t i) const {
+        i = rightIndex(i);
+        while(hasLeft(i)){
+            i = leftIndex(i);
+        }
+        return i;
+    }
+
+    bool hasRight(size_t i) const{
         const ri = rightIndex(i);
         return ri < data.length && !data[ri].isNull;
     }
 
-    size_t hasLeft(size_t i){
+    bool hasLeft(size_t i) const{
         const li = leftIndex(i);
         return li < data.length && !data[li].isNull;
     }
 
-
-    byte balance(size_t i){
-        byte lh = hasLeft(i) ? data[leftIndex(i)].height : -1;
-        byte rh = hasRight(i) ? data[rightIndex(i)].height : -1;
-        return cast(byte)(lh - rh);
+    bool isLeaf(size_t i) const {
+        return !(hasRight(i) || hasLeft(i));
     }
 
-    byte computeHeight(size_t i){
-        byte lh = hasLeft(i) ? data[leftIndex(i)].height : -1;
-        byte rh = hasRight(i) ? data[rightIndex(i)].height : -1;
-        return cast(byte)(max(lh, rh) + 1);
+    byte leftHeight(size_t i) const{
+        return hasLeft(i) ? data[leftIndex(i)].height : -1;
     }
+
+    byte rightHeight(size_t i) const{
+        return hasRight(i) ? data[rightIndex(i)].height : -1;
+    }
+
+    byte balance(size_t i) const{
+        return cast(byte)(leftHeight(i) - rightHeight(i));
+    }
+
+    byte computeHeight(size_t i) const{
+        return cast(byte)(max(leftHeight(i), rightHeight(i)) + 1);
+    }
+
 
     @safe:
     public:
+
     bool insert(T t){
-        size_t i = 0;
+        return insert(t, 0);
+    }
+
+
+    private bool insert(T t, size_t i){
+        writeln("insert ", t, " at index ", i);
         while(true){
             if(i >= data.length){
                 //grow "in place", and all future values will have nullance = 0, meaning they are considered "null"
@@ -90,13 +122,117 @@ struct Node{
             if(data[i].data == t){
                 return false;
             }
-            i = (t < data[i].data) ? leftIndex(i) : rightIndex(i);
+            const bal = balance(i);
+            if(t < data[i].data){
+                //want to go left
+                if(bal > 0){
+                    //left is taller, insert could break balance
+
+                    //current root = data[i]
+                    //steal the predecessor and stick it at i
+                    //insert current root right
+                    //now continue inserting left
+                    assert(0, "not implemented yet");
+                }
+                i = leftIndex(i);
+            } else {
+                //want to go right
+
+                if(bal < 0){
+                    //but right is too tall already
+                    auto currentRoot = data[i].data;
+
+                    auto si = succIndex(i);
+                    data[i].data = data[si].data;
+
+                    remove(data[si].data, rightIndex(i));
+
+                    insert(currentRoot, leftIndex(i));
+
+
+                }
+                i = rightIndex(i);
+            }
         }
 
+        updateHeight(parentIndex(i));
+        return true;
+    }
+
+    //todo, auto ref this, probably
+    private bool remove(T t, size_t i){
+        writeln("remove ", t, " from index ", i);
+        while(true){
+            writeln("remove, i: ", i);
+            if(i >= data.length || data[i].isNull()){
+                return false; // not in here
+            }
+            if(data[i].data == t){
+                //assuming we've preemptively made sure removing this won't cause imbalance up the tree
+                //if it's not a leaf, we can't just nullify it
+                if(isLeaf(i)){
+                    data[i].nullify();
+                    updateHeight(parentIndex(i));
+                    writeln("just deleted a leaf: ", t);
+                    printAsTree();
+                    return true;
+                } else {
+                    //steal predecessor/successor, then delete that
+                    //pick the taller subtree to delete from
+                    //break ties arbitrarily?
+                    const lh = leftHeight(i);
+                    const rh = rightHeight(i);
+                    if(lh > rh){
+                        //steal predecessor
+                        const pi = predIndex(i);
+                        data[i].data = data[pi].data;
+                        remove(data[pi].data, leftIndex(i));
+                    } else {
+                        const si = succIndex(i);
+                        data[i].data = data[si].data;
+                        remove(data[si].data, rightIndex(i));
+                    }
+                    writeln("just deleted a non leaf via stealing: ", t);
+                    printAsTree();
+                    return true;
+
+                }
+            }
+            const bal = balance(i);
+            writeln("balance: ", bal);
+            if(t < data[i].data){ //delete from left side
+                if(bal < 0){ //left side too short
+                    writeln("deleting from left, and it's too short");
+                    const oldRoot = data[i].data;
+                    //steal successor
+                    const si = succIndex(i);
+                    data[i].data = data[si].data;
+                    remove(data[si].data, rightIndex(i));
+                    //insert oldRoot left
+                    insert(oldRoot, leftIndex(i));
+                }
+                i = leftIndex(i);
+
+            } else { //delete from right side
+                if(bal > 0){ //right side is shorter, deleting right may cause imbalance here
+                    //steal the predecessor from the left side, put it in the root
+                    writeln("deleting from right, and it's too short");
+                    const oldRoot = data[i].data;
+                    const pi = predIndex(i);
+                    data[i].data = data[pi].data;
+                    remove(data[pi].data, leftIndex(i));
+                    //insert the old root
+                    insert(oldRoot, rightIndex(i));
+                    //then continue deleting
+                }
+                i = rightIndex(i);
+            }
+        }
+    }
+
+    private void updateHeight(size_t i){
         //percolate height up
         while(true) {
-            i = parentIndex(i);
-
             byte newHeight = computeHeight(i);
             if(newHeight == data[i].height){
                 break;
@@ -107,13 +243,32 @@ struct Node{
             if(i == par){
                 break;
             }
+            i = par;
         }
-        return true;
+
     }
 
     string toString() const{
         import std.conv : to;
         return data.to!string();
+    }
+
+    void printAsTree() const {
+        import std.conv : to;
+        auto rowLength = 1;
+        auto printedThisRow = 0;
+        foreach(i; 0..data.length){
+            write(data[i].isNull ? "null" :
+                  "(data: " ~ to!string(data[i].data) ~ " height: " ~ to!string(data[i].height) ~ ")",
+                  "    ");
+            ++printedThisRow;
+            if(printedThisRow == rowLength){
+                writeln();
+                rowLength *= 2;
+                printedThisRow = 0;
+            }
+        }
+        writeln();
     }
 
 }
@@ -122,8 +277,9 @@ unittest {
     import std.stdio;
 
     Arrayvl!int tree;
-    foreach(i; 0..5){
+    foreach(i; 0..10){
         assert(tree.insert(i));
-        writeln(tree);
+        tree.printAsTree();
+        writeln("\n\n");
     }
 }
