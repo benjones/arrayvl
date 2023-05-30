@@ -45,8 +45,7 @@ struct Node{
 }
 
      //start the Node array off at this size, then scale by GrowthFactor
-    enum MinSize = 16;
-    enum GrowthFactor = 2;
+    enum MinSize = 15;
     Node[] data;
 
     size_t parentIndex(size_t i) const{ return i == 0 ? 0 : (i -1)/2; }
@@ -113,10 +112,16 @@ struct Node{
         while(true){
             if(i >= data.length){
                 //grow "in place", and all future values will have nullance = 0, meaning they are considered "null"
-                data.length = max(MinSize, data.length*GrowthFactor);
+                if(!data){
+                    data.length = MinSize;
+                } else {
+                    //add another "level" to the binary tree
+                    data.length = 2*data.length + 1;
+                }
             }
             if(data[i].isNull()){
                 data[i].makeLeaf(t);
+                writeln("new leaf at ", i, " value ", t);
                 break;
             }
             if(data[i].data == t){
@@ -127,12 +132,14 @@ struct Node{
                 //want to go left
                 if(bal > 0){
                     //left is taller, insert could break balance
-
-                    //current root = data[i]
+                    writeln("insert left at ", i, " with left too tall");
+                    auto currentRoot = data[i].data;
                     //steal the predecessor and stick it at i
+                    auto pi = predIndex(i);
+                    data[i].data = data[pi].data;
+                    remove(data[pi].data, leftIndex(i));
                     //insert current root right
-                    //now continue inserting left
-                    assert(0, "not implemented yet");
+                    insert(currentRoot, rightIndex(i));
                 }
                 i = leftIndex(i);
             } else {
@@ -140,6 +147,7 @@ struct Node{
 
                 if(bal < 0){
                     //but right is too tall already
+                    writeln("insert right at ", i, " with right too tall");
                     auto currentRoot = data[i].data;
 
                     auto si = succIndex(i);
@@ -163,7 +171,7 @@ struct Node{
     private bool remove(T t, size_t i){
         writeln("remove ", t, " from index ", i);
         while(true){
-            writeln("remove, i: ", i);
+            //            writeln("remove, i: ", i);
             if(i >= data.length || data[i].isNull()){
                 return false; // not in here
             }
@@ -173,13 +181,14 @@ struct Node{
                 if(isLeaf(i)){
                     data[i].nullify();
                     updateHeight(parentIndex(i));
-                    writeln("just deleted a leaf: ", t);
-                    printAsTree();
+                    //                    writeln("just deleted a leaf: ", t);
+                    //                    printAsTree();
                     return true;
                 } else {
                     //steal predecessor/successor, then delete that
                     //pick the taller subtree to delete from
                     //break ties arbitrarily?
+                    writeln("deleting non-leaf at ", i);
                     const lh = leftHeight(i);
                     const rh = rightHeight(i);
                     if(lh > rh){
@@ -192,17 +201,17 @@ struct Node{
                         data[i].data = data[si].data;
                         remove(data[si].data, rightIndex(i));
                     }
-                    writeln("just deleted a non leaf via stealing: ", t);
-                    printAsTree();
+                    //                    writeln("just deleted a non leaf via stealing: ", t);
+                    //                    printAsTree();
                     return true;
 
                 }
             }
             const bal = balance(i);
-            writeln("balance: ", bal);
+            //            writeln("balance: ", bal);
             if(t < data[i].data){ //delete from left side
                 if(bal < 0){ //left side too short
-                    writeln("deleting from left, and it's too short");
+                    writeln("deleting from left at ", i, " and it's too short");
                     const oldRoot = data[i].data;
                     //steal successor
                     const si = succIndex(i);
@@ -216,7 +225,7 @@ struct Node{
             } else { //delete from right side
                 if(bal > 0){ //right side is shorter, deleting right may cause imbalance here
                     //steal the predecessor from the left side, put it in the root
-                    writeln("deleting from right, and it's too short");
+                    writeln("deleting from right at ", i, " and it's too short");
                     const oldRoot = data[i].data;
                     const pi = predIndex(i);
                     data[i].data = data[pi].data;
@@ -277,9 +286,14 @@ unittest {
     import std.stdio;
 
     Arrayvl!int tree;
-    foreach(i; 0..10){
+    foreach(i; 0..20){
         assert(tree.insert(i));
-        tree.printAsTree();
-        writeln("\n\n");
+        if(true || (i % 10) == 0){
+            tree.printAsTree();
+            writeln("\n\n");
+        }
     }
+    tree.printAsTree();
+    writeln();
+
 }
