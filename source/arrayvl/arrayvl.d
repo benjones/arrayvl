@@ -11,6 +11,7 @@ private:
 struct Node{
     //ubyte nullance; //null and balance, optimization to be done later, maybe, but height seems easier
     byte height = -1; //signed byte, -1 height means null node
+    ulong size; //size of this subtree
     T data;
     @safe:
     @nogc{
@@ -33,12 +34,14 @@ struct Node{
         void makeLeaf(T val){
             data = val;
             height = 0;
+            size = 1;
         }
     }
 
     string toString() const {
         import std.conv : to;
-        return isNull ? "null" : "Node(" ~ to!string(height) ~ " " ~ to!string(data) ~ ")";
+        return isNull ? "null" :
+            "Node(height:" ~ to!string(height) ~ " size: " ~ to!string(size) ~ " data: " ~ to!string(data) ~ ")";
     }
 
 
@@ -98,6 +101,27 @@ struct Node{
         return cast(byte)(max(leftHeight(i), rightHeight(i)) + 1);
     }
 
+    ulong leftSize(size_t i) const {
+        return hasLeft(i) ? data[leftIndex(i)].size : 0;
+    }
+
+    ulong rightSize(size_t i) const {
+        return hasRight(i) ? data[rightIndex(i)].size : 0;
+    }
+
+    ulong computeSize(size_t i) const {
+        return leftSize(i) + rightSize(i) + 1;
+    }
+
+    static ulong maxSubtreeSize(ulong height) {
+        return (1UL << (height + 1)) -1;
+    }
+
+    bool hasSpace(size_t i) const {
+        writeln("checking space at ", i, " size: ", data[i].size, " height: ", data[i].height,
+                " max: ", maxSubtreeSize(data[i].height));
+        return data[i].isNull ? false : data[i].size < maxSubtreeSize(data[i].height);
+    }
 
     @safe:
     public:
@@ -109,7 +133,13 @@ struct Node{
 
     private bool insert(T t, size_t i){
         writeln("insert ", t, " at index ", i);
+
+        //TODO: is this true for recursive calls?
+        // NO IT IS NOT!!!!
+
+        bool canIncreaseHeight = true;
         while(true){
+            writeln("inserting ", t, " i: ", i, " canIncreaseHeight: ", canIncreaseHeight);
             if(i >= data.length){
                 //grow "in place", and all future values will have nullance = 0, meaning they are considered "null"
                 if(!data){
@@ -128,11 +158,17 @@ struct Node{
                 return false;
             }
             const bal = balance(i);
+
+            //node might be balanced, but we may be required to keep it's height the same
+            //so it doesn't imbalance the tree further up
+
             if(t < data[i].data){
                 //want to go left
-                if(bal > 0){
+                const li = leftIndex(i);
+
+                if((!canIncreaseHeight || bal > 0) && !hasSpace(li)){
                     //left is taller, insert could break balance
-                    writeln("insert left at ", i, " with left too tall");
+                    writeln("insert left at ", i, " with left too tall and full");
                     auto currentRoot = data[i].data;
                     //steal the predecessor and stick it at i
                     auto pi = predIndex(i);
@@ -141,11 +177,24 @@ struct Node{
                     //insert current root right
                     insert(currentRoot, rightIndex(i));
                 }
-                i = leftIndex(i);
+
+                // Not 100% on this...
+                //if it's evenly balanced when we get here, canChangeHeight shouldn't change
+                const newBal = balance(i);
+                if(newBal < 0){
+                    //right side is heavier, so we can actually grow taller left, and that's fine
+                    canIncreaseHeight = true;
+                }
+                if(newBal > 0){
+                    //left side is heavier, so make sure we don't make it even taller
+                    canIncreaseHeight = false;
+                }
+
+                i = li;
             } else {
                 //want to go right
-
-                if(bal < 0){
+                const ri = rightIndex(i);
+                if((!canIncreaseHeight || bal < 0) && !hasSpace(ri)){
                     //but right is too tall already
                     writeln("insert right at ", i, " with right too tall");
                     auto currentRoot = data[i].data;
@@ -159,7 +208,19 @@ struct Node{
 
 
                 }
-                i = rightIndex(i);
+                // Not 100% on this...
+                //if it's evenly balanced when we get here, canChangeHeight shouldn't change
+                const newBal = balance(i);
+                if(newBal > 0){
+                    //left side is heavier, so we can actually grow taller right, and that's fine
+                    canIncreaseHeight = true;
+                }
+                if(newBal < 0){
+                    //right side is heavier, so make sure we don't make it even taller
+                    canIncreaseHeight = false;
+                }
+
+                i = ri;
             }
         }
 
@@ -240,13 +301,17 @@ struct Node{
     }
 
     private void updateHeight(size_t i){
-        //percolate height up
+        //percolate height and size up
         while(true) {
             byte newHeight = computeHeight(i);
-            if(newHeight == data[i].height){
+            ulong newSize = computeSize(i);
+            //I think this will probably always propagate up?   Maybe there
+            //will be cases when you swap and the size of a subtree doesn't change?
+            if(newHeight == data[i].height && newSize == data[i].size){
                 break;
             } else {
                 data[i].height = newHeight;
+                data[i].size = newSize;
             }
             const par = parentIndex(i);
             if(i == par){
@@ -268,7 +333,8 @@ struct Node{
         auto printedThisRow = 0;
         foreach(i; 0..data.length){
             write(data[i].isNull ? "null" :
-                  "(data: " ~ to!string(data[i].data) ~ " height: " ~ to!string(data[i].height) ~ ")",
+                  "(data: " ~ to!string(data[i].data) ~ " height: " ~ to!string(data[i].height) ~
+                  " size: " ~ to!string(data[i].size) ~ ")",
                   "    ");
             ++printedThisRow;
             if(printedThisRow == rowLength){
